@@ -1,11 +1,11 @@
 // src/index.js
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import LoginForm from './components/LoginForm';
 import CreateAccount from './components/CreateAccount';
 import Dashboard from './components/Dashboard';
+import Fitnes1 from './components/Fitnes1';
 
 const App = () => {
   return (
@@ -14,6 +14,7 @@ const App = () => {
         <Route path="/" element={<LoginForm />} />
         <Route path="/create-account" element={<CreateAccount />} />
         <Route path="/Dashboard" element={<Dashboard />} />
+        <Route path="/fitnes1" element={<Fitnes1 />} />
       </Routes>
     </Router>
   );
