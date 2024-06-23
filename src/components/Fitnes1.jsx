@@ -6,22 +6,20 @@ import { HomeOutlined, DashboardOutlined, CalendarOutlined, UserOutlined } from 
 const Fitnes1 = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const videoRef = useRef(null);
+  const canvasRef = useRef(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const streamRef = useRef(null);
+  const detectFrameIdRef = useRef(null);
 
   useEffect(() => {
-    let intervalId;
-
     if (isCameraOpen) {
-      intervalId = setInterval(() => {
-        const videoElement = videoRef.current;
-        if (videoElement) {
-          videoElement.src = `http://127.0.0.1:5000/video_feed?timestamp=${Date.now()}`;
-        }
-      }, 100);
+      startCamera();
+    } else {
+      stopCamera();
     }
 
     return () => {
-      clearInterval(intervalId);
+      stopCamera();
     };
   }, [isCameraOpen]);
 
@@ -29,12 +27,80 @@ const Fitnes1 = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
 
-  const startCamera = () => {
-    setIsCameraOpen(true);
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      videoRef.current.srcObject = stream;
+      streamRef.current = stream;
+      videoRef.current.onloadedmetadata = () => {
+        videoRef.current.play();
+        detectObjects();
+      };
+    } catch (err) {
+      console.error("Error accessing the camera: ", err);
+      alert("カメラへのアクセスが拒否されました。ブラウザの設定を確認してください。");
+    }
   };
 
   const stopCamera = () => {
-    setIsCameraOpen(false);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (detectFrameIdRef.current) {
+      cancelAnimationFrame(detectFrameIdRef.current);
+      detectFrameIdRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  const detectObjects = async () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const detectFrame = async () => {
+      if (!isCameraOpen) {
+        return;
+      }
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const videoFrame = canvas.toDataURL('image/jpeg', 0.8);
+
+      try {
+        const response = await fetch('http://localhost:5000/process_frame', {
+          method: 'POST',
+          body: JSON.stringify({ image: videoFrame }),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error ${response.status}`);
+        }
+
+        const { processedFrame } = await response.json();
+
+        const img = new Image();
+        img.onload = () => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        };
+        img.src = processedFrame;
+      } catch (err) {
+        console.error('Error processing frame:', err);
+      }
+
+      detectFrameIdRef.current = requestAnimationFrame(detectFrame);
+    };
+
+    detectFrameIdRef.current = requestAnimationFrame(detectFrame);
   };
 
   return (
@@ -99,13 +165,14 @@ const Fitnes1 = () => {
       <div className={`video-container ${isCameraOpen ? 'camera-open' : ''}`}>
         {isCameraOpen ? (
           <div className="camera-feed">
-            <img ref={videoRef} alt="Video feed" />
-            <button className="stop-button" onClick={stopCamera}>
+            <video ref={videoRef} style={{ display: 'none' }} autoPlay muted />
+            <canvas ref={canvasRef} style={{ width: '100%', height: 'auto' }} />
+            <button className="stop-button" onClick={() => setIsCameraOpen(false)}>
               撮影を停止する
             </button>
           </div>
         ) : (
-          <button className="start-button" onClick={startCamera}>
+          <button className="start-button" onClick={() => setIsCameraOpen(true)}>
             撮影を開始する
           </button>
         )}
